@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JMX Comparator — JMeter Analyzer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+  :root {
+    --bg:#0a0a0f;--surface:#111118;--surface2:#1a1a24;--border:#2a2a3a;
+    --accent:#00e5ff;--accent2:#ff3d71;--accent3:#a259ff;--text:#e8e8f0;
+    --muted:#6b6b80;--success:#00e096;--warning:#ffaa00;
+    --diff-mod:#2a1f00;--diff-mod-border:#ffaa00;--diff-mod-text:#ffaa00;
+    --diff-left:#1a0010;--diff-left-border:#ff3d71;--diff-left-text:#ff3d71;
+    --diff-right:#001a10;--diff-right-border:#00e096;--diff-right-text:#00e096;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,255,.03)1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,.03)1px,transparent 1px);background-size:48px 48px;pointer-events:none;z-index:0;}
+
+  /* Header */
+  .header{position:relative;z-index:10;padding:20px 32px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;background:linear-gradient(180deg,rgba(0,229,255,.04)0%,transparent 100%);}
+  .logo-mark{width:36px;height:36px;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:12px;color:var(--accent);}
+  .header h1{font-size:20px;font-weight:800;letter-spacing:-.5px;} .header h1 span{color:var(--accent);}
+  .header-sub{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:2px;}
+  .header-nav{margin-left:auto;display:flex;gap:8px;}
+  .nav-btn{padding:6px 14px;font-size:11px;font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);text-decoration:none;transition:all .15s;display:flex;align-items:center;gap:6px;}
+  .nav-btn:hover,.nav-btn.active{border-color:var(--accent);color:var(--accent);}
+
+  /* Layout */
+  .page{position:relative;z-index:1;padding:24px 28px;max-width:100%;}
+
+  /* Upload zone */
+  .upload-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+  .upload-panel{background:var(--surface);border:1px solid var(--border);padding:20px;}
+  .upload-panel h3{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:12px;}
+  .upload-panel h3 span{color:var(--accent);}
+  .upload-panel h3 span.r{color:var(--accent2);}
+  .drop-zone{border:1.5px dashed var(--border);padding:20px;text-align:center;cursor:pointer;transition:all .2s;position:relative;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;}
+  .drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:rgba(0,229,255,.04);}
+  .drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;}
+  .drop-zone .dz-icon{font-size:24px;}
+  .drop-zone strong{font-size:12px;color:var(--text);}
+  .drop-zone p{font-size:11px;color:var(--muted);}
+  .file-loaded{margin-top:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);font-family:'Space Mono',monospace;font-size:11px;display:flex;align-items:center;gap:8px;}
+  .file-loaded .fname{flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .file-loaded .fcount{color:var(--muted);font-size:10px;}
+
+  /* Controls */
+  .controls{display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap;}
+  .run-btn{padding:10px 24px;background:var(--accent);color:#000;border:none;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;transition:opacity .15s;white-space:nowrap;}
+  .run-btn:hover{opacity:.85;} .run-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .filter-btn{padding:6px 14px;font-size:10px;font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+  .filter-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .filter-btn.active{border-color:var(--warning);color:var(--warning);background:rgba(255,170,0,.08);}
+  .filter-btn.active-all{border-color:var(--muted);color:var(--text);}
+
+  /* Diff navigation */
+  .diff-nav{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap;}
+  .diff-nav-count{font-family:'Space Mono',monospace;font-size:11px;}
+  .diff-nav-count span{font-weight:700;}
+  .diff-nav-count .mod{color:var(--warning);}
+  .diff-nav-count .left{color:var(--diff-left-text);}
+  .diff-nav-count .right{color:var(--diff-right-text);}
+  .diff-nav-count .same{color:var(--muted);}
+  .nav-arrow{padding:4px 12px;font-size:12px;font-family:'Space Mono',monospace;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+  .nav-arrow:hover{border-color:var(--accent);color:var(--accent);}
+  .nav-pos{font-size:11px;font-family:'Space Mono',monospace;color:var(--muted);min-width:60px;text-align:center;}
+
+  /* Split view */
+  .split-view{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--border);overflow:hidden;}
+  .split-pane{overflow:auto;max-height:calc(100vh - 340px);}
+  .split-pane-header{position:sticky;top:0;z-index:10;padding:8px 16px;background:var(--surface2);border-bottom:2px solid var(--border);font-size:10px;letter-spacing:2px;text-transform:uppercase;font-family:'Space Mono',monospace;display:flex;align-items:center;gap:8px;}
+  .split-pane-header.left-header{color:var(--accent);border-right:1px solid var(--border);}
+  .split-pane-header.right-header{color:var(--accent2);}
+  .split-pane.left-pane{border-right:1px solid var(--border);}
+
+  /* Tree nodes */
+  .tree-node{display:flex;align-items:flex-start;padding:3px 8px 3px 0;border-bottom:1px solid rgba(42,42,58,.5);min-height:32px;transition:background .1s;cursor:pointer;}
+  .tree-node:hover{background:rgba(255,255,255,.03);}
+  .tree-node.tn-same{}
+  .tree-node.tn-modified{background:var(--diff-mod);border-left:3px solid var(--diff-mod-border);}
+  .tree-node.tn-only_left{background:var(--diff-left);border-left:3px solid var(--diff-left-border);}
+  .tree-node.tn-only_right{background:var(--diff-right);border-left:3px solid var(--diff-right-border);}
+  .tree-node.tn-empty{background:rgba(20,20,30,.4);min-height:32px;}
+  .tree-node.tn-focused{outline:2px solid var(--accent);outline-offset:-2px;}
+
+  .tn-indent{flex:0 0 auto;}
+  .tn-icon{flex:0 0 18px;font-size:13px;margin-right:4px;line-height:1.8;}
+  .tn-body{flex:1;min-width:0;padding:4px 0;}
+  .tn-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tn-tag{font-size:9px;color:var(--muted);font-family:'Space Mono',monospace;margin-right:6px;}
+  .tn-disabled{opacity:.45;text-decoration:line-through;}
+  .tn-status-badge{font-size:8px;padding:1px 5px;font-family:'Space Mono',monospace;letter-spacing:1px;text-transform:uppercase;margin-left:6px;vertical-align:middle;}
+  .badge-mod{background:rgba(255,170,0,.2);color:var(--warning);}
+  .badge-left{background:rgba(255,61,113,.2);color:var(--diff-left-text);}
+  .badge-right{background:rgba(0,224,150,.2);color:var(--diff-right-text);}
+
+  /* Props detail popup */
+  .props-panel{margin-top:16px;background:var(--surface);border:1px solid var(--border);padding:16px;display:none;}
+  .props-panel.show{display:block;}
+  .props-panel h4{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:12px;}
+  .props-table{width:100%;border-collapse:collapse;font-size:11px;font-family:'Space Mono',monospace;}
+  .props-table th{padding:5px 10px;text-align:left;background:var(--surface2);color:var(--muted);font-size:9px;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border);}
+  .props-table td{padding:5px 10px;border-bottom:1px solid var(--border);word-break:break-all;vertical-align:top;}
+  .props-table td.prop-key{color:var(--muted);white-space:nowrap;min-width:200px;}
+  .props-table td.prop-val-left{color:var(--accent);}
+  .props-table td.prop-val-right{color:var(--accent2);}
+  .props-table tr.changed-row td{background:rgba(255,170,0,.05);}
+  .props-table tr.changed-row td.prop-key{color:var(--warning);}
+
+  /* Misc */
+  .empty-state{text-align:center;padding:60px 20px;color:var(--muted);font-family:'Space Mono',monospace;font-size:12px;}
+  .empty-state .big{font-size:48px;margin-bottom:12px;opacity:.3;}
+  .loading{display:none;align-items:center;gap:10px;color:var(--muted);font-family:'Space Mono',monospace;font-size:12px;padding:20px 0;}
+  .loading.show{display:flex;}
+  .spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .toast{position:fixed;bottom:20px;right:20px;z-index:1000;background:var(--surface2);border:1px solid var(--accent);padding:10px 18px;font-size:12px;font-family:'Space Mono',monospace;color:var(--accent);transform:translateY(20px);opacity:0;transition:all .3s;pointer-events:none;}
+  .toast.show{transform:translateY(0);opacity:1;} .toast.error{border-color:var(--accent2);color:var(--accent2);}
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-track{background:var(--surface);}
+  ::-webkit-scrollbar-thumb{background:var(--border);}
+  ::-webkit-scrollbar-thumb:hover{background:var(--accent);}
+
+  /* Scrollbar sync indicator */
+  .sync-indicator{font-size:9px;font-family:'Space Mono',monospace;color:var(--muted);margin-left:auto;}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo-mark">JM</div>
+  <div>
+    <h1><span>JMX</span> Comparator</h1>
+    <div class="header-sub">Comparing JMeter test plan files (.jmx)</div>
+  </div>
+  <nav class="header-nav">
+    <a href="/" class="nav-btn">📊 CSV Analyzer</a>
+    <a href="/jmx" class="nav-btn active">🔀 JMX Comparator</a>
+  </nav>
+</header>
+
+<div class="page">
+  <!-- Upload -->
+  <div class="upload-row">
+    <div class="upload-panel">
+      <h3><span>LEFT</span> — baseline file (A)</h3>
+      <div class="drop-zone" id="dzLeft">
+        <input type="file" id="fileLeft" accept=".jmx">
+        <div class="dz-icon">📄</div>
+        <strong>Click or drag & drop a .jmx file</strong>
+        <p>Baseline file (A)</p>
+      </div>
+      <div id="infoLeft"></div>
+    </div>
+    <div class="upload-panel">
+      <h3><span class="r">RIGHT</span> — comparison file (B)</h3>
+      <div class="drop-zone" id="dzRight">
+        <input type="file" id="fileRight" accept=".jmx">
+        <div class="dz-icon">📄</div>
+        <strong>Click or drag & drop a .jmx file</strong>
+        <p>Comparison file (B)</p>
+      </div>
+      <div id="infoRight"></div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="run-btn" id="btnCompare" disabled>🔀 Compare JMX Files</button>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-family:'Space Mono',monospace;">Filter:</span>
+      <button class="filter-btn active-all" id="filterAll" onclick="setFilter('all')">All</button>
+      <button class="filter-btn" id="filterDiff" onclick="setFilter('diff')" style="border-color:var(--warning);color:var(--warning);">⚡ Differences only</button>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+      <span style="font-size:10px;font-family:'Space Mono',monospace;color:var(--muted);">Scroll:</span>
+      <button class="filter-btn active-all" id="syncScrollBtn" onclick="toggleSyncScroll()">🔗 Synchronized</button>
+    </div>
+  </div>
+
+  <div class="loading" id="loadingCmp"><div class="spinner"></div> Comparing JMX files...</div>
+
+  <!-- Diff navigation -->
+  <div id="diffNav" style="display:none">
+    <div class="diff-nav">
+      <div class="diff-nav-count">
+        Differences: <span class="mod" id="statMod">0</span> modified &nbsp;|&nbsp;
+        <span class="left" id="statLeft">0</span> only in A &nbsp;|&nbsp;
+        <span class="right" id="statRight">0</span> only in B &nbsp;|&nbsp;
+        <span class="same" id="statSame">0</span> identical
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+        <button class="nav-arrow" onclick="navDiff(-1)">◀ Previous diff</button>
+        <span class="nav-pos" id="navPos">—</span>
+        <button class="nav-arrow" onclick="navDiff(1)">Next diff ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Split view -->
+  <div id="splitContainer" style="display:none">
+    <div class="split-view" id="splitView">
+      <div class="split-pane left-pane" id="paneLeft">
+        <div class="split-pane-header left-header">
+          📄 <span id="headerLeft">File A</span>
+          <span class="sync-indicator" id="syncLabel">🔗 Sync</span>
+        </div>
+        <div id="treeLeft"></div>
+      </div>
+      <div class="split-pane" id="paneRight">
+        <div class="split-pane-header right-header">
+          📄 <span id="headerRight">File B</span>
+        </div>
+        <div id="treeRight"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Props detail -->
+  <div class="props-panel" id="propsPanel">
+    <h4>Property differences — <span id="propsPanelTitle" style="color:var(--warning)"></span></h4>
+    <table class="props-table" id="propsTable">
+      <thead><tr><th>Property</th><th>File A (bazowy)</th><th>File B (porównanie)</th></tr></thead>
+      <tbody id="propsBody"></tbody>
+    </table>
+  </div>
+
+  <div id="emptyState" class="empty-state">
+    <div class="big">🔀</div>
+    Upload two .jmx files and click "Compare JMX Files"<br>
+    <span style="font-size:10px;color:var(--muted);margin-top:8px;display:block;">Zobaczysz drzewo elements JMeter obok siebie z podświetlonymi różnicami</span>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const api = async (url, body) => {
+  const res = await fetch(url, {
+    method: body ? 'POST' : 'GET',
+    headers: body ? {'Content-Type':'application/json'} : {},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  return res.json();
+};
+function toast(msg, error=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show'+(error?' error':'');
+  setTimeout(() => t.className='toast', 3000);
+}
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let fileA = null, fileB = null;
+let cmpData = null;
+let filterMode = 'all';
+let diffIndices = [];   // indices into left/right arrays where status != 'same'
+let currentDiffIdx = -1;
+let syncScroll = true;
+let isScrolling = false;
+
+// ── JMX element icons ─────────────────────────────────────────────────────────
+const TAG_ICONS = {
+  ThreadGroup:'👥', SetupThreadGroup:'⚙️', TearDownThreadGroup:'🧹',
+  HTTPSamplerProxy:'🌐', JDBCSampler:'🗄️', JSR223Sampler:'📝', BeanShellSampler:'🐚',
+  GenericSampler:'📡', TCPSampler:'🔌', FTPSampler:'📁', SMTPSampler:'📧',
+  TransactionController:'📦', LoopController:'🔄', WhileController:'⏩',
+  IfController:'❓', ForeachController:'🔁', RunTime:'⏱️',
+  CriticalSectionController:'🔒', RandomController:'🎲',
+  ThroughputController:'⚡', SwitchController:'🔀',
+  HeaderManager:'📋', CookieManager:'🍪', AuthManager:'🔑', CacheManager:'💾',
+  DNSCacheManager:'🌍', KeystoreConfig:'🗝️',
+  ResponseAssertion:'✅', JSONPathAssertion:'🔍', XPathAssertion:'🔍',
+  DurationAssertion:'⏲️', SizeAssertion:'📏', HTMLAssertion:'🌐',
+  XPathExtractor:'✂️', RegexExtractor:'✂️', JSONPathExtractor:'✂️',
+  BoundaryExtractor:'✂️', XPath2Extractor:'✂️',
+  ConstantTimer:'⏰', GaussianRandomTimer:'📊', UniformRandomTimer:'📊',
+  PoissonRandomTimer:'📊', SynchronizingTimer:'⏰', ConstantThroughputTimer:'⚡',
+  ResultCollector:'📊', BackendListener:'📡', DebugSampler:'🐛',
+  CSVDataSet:'📄', CounterConfig:'🔢', RandomVariableConfig:'🎯',
+  Arguments:'📋', UserDefinedVariables:'📋',
+  hashTree:'', jmeterTestPlan:'🧪', TestPlan:'🧪',
+};
+
+function iconFor(tag) {
+  return TAG_ICONS[tag] || '▸';
+}
+
+// ── File upload ───────────────────────────────────────────────────────────────
+async function handleJmxUpload(side, file) {
+  if (!file.name.endsWith('.jmx')) { toast('.jmx files only', true); return; }
+  toast(`Uploading ${file.name}...`);
+  const fd = new FormData(); fd.append('file', file);
+  const res = await fetch('/api/jmx/upload', {method:'POST', body:fd}).then(r=>r.json());
+  if (res.error) { toast(res.error, true); return; }
+  if (side === 'left') {
+    fileA = res.filename;
+    document.getElementById('infoLeft').innerHTML = `
+      <div class="file-loaded">
+        <span>📄</span>
+        <span class="fname">${res.filename}</span>
+        <span class="fcount">${res.node_count} elements</span>
+      </div>`;
+    document.getElementById('headerLeft').textContent = res.filename;
+  } else {
+    fileB = res.filename;
+    document.getElementById('infoRight').innerHTML = `
+      <div class="file-loaded">
+        <span>📄</span>
+        <span class="fname">${res.filename}</span>
+        <span class="fcount">${res.node_count} elements</span>
+      </div>`;
+    document.getElementById('headerRight').textContent = res.filename;
+  }
+  document.getElementById('btnCompare').disabled = !(fileA && fileB);
+  toast(`✓ ${res.filename} (${res.node_count} elements)`);
+}
+
+['Left','Right'].forEach(side => {
+  const input = document.getElementById('file'+side);
+  const dz = document.getElementById('dz'+side);
+  const s = side.toLowerCase();
+  input.addEventListener('change', e => { if (e.target.files[0]) handleJmxUpload(s, e.target.files[0]); e.target.value=''; });
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag-over'); if (e.dataTransfer.files[0]) handleJmxUpload(s, e.dataTransfer.files[0]); });
+});
+
+// ── Compare ───────────────────────────────────────────────────────────────────
+document.getElementById('btnCompare').addEventListener('click', async () => {
+  if (!fileA || !fileB) return;
+  document.getElementById('loadingCmp').classList.add('show');
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('splitContainer').style.display = 'none';
+  document.getElementById('diffNav').style.display = 'none';
+  document.getElementById('propsPanel').classList.remove('show');
+
+  const data = await api('/api/jmx/compare', {file_a: fileA, file_b: fileB});
+  document.getElementById('loadingCmp').classList.remove('show');
+
+  if (data.error) { toast(data.error, true); document.getElementById('emptyState').style.display=''; return; }
+
+  cmpData = data;
+  diffIndices = data.left.map((n,i) => n.status !== 'same' ? i : -1).filter(i => i >= 0);
+  currentDiffIdx = -1;
+
+  // Stats
+  document.getElementById('statMod').textContent = data.stats.modified;
+  document.getElementById('statLeft').textContent = data.stats.only_left;
+  document.getElementById('statRight').textContent = data.stats.only_right;
+  document.getElementById('statSame').textContent = data.stats.same;
+
+  document.getElementById('diffNav').style.display = 'block';
+  document.getElementById('splitContainer').style.display = 'block';
+
+  renderTrees();
+  setupScrollSync();
+
+  toast(`Znaleziono ${diffIndices.length} różnic`);
+});
+
+// ── Render trees ──────────────────────────────────────────────────────────────
+function renderTrees() {
+  const left = cmpData.left, right = cmpData.right;
+
+  function renderSide(nodes, containerId, side) {
+    const container = document.getElementById(containerId);
+    const filtered = filterMode === 'diff'
+      ? nodes.map((n, i) => ({...n, _origIdx: i})).filter(n => n.status !== 'same')
+      : nodes.map((n, i) => ({...n, _origIdx: i}));
+
+    container.innerHTML = filtered.map(n => {
+      if (!n.tag) {
+        // Empty placeholder
+        return `<div class="tree-node tn-empty" style="padding-left:${(n.depth||0)*16+8}px">&nbsp;</div>`;
+      }
+      const indent = (n.depth || 0) * 16 + 8;
+      const icon = iconFor(n.tag);
+      const disabled = n.enabled === 'false';
+      const statusBadge = n.status === 'modified'
+        ? `<span class="tn-status-badge badge-mod">MOD</span>`
+        : n.status === 'only_left'
+          ? `<span class="tn-status-badge badge-left">ONLY A</span>`
+          : n.status === 'only_right'
+            ? `<span class="tn-status-badge badge-right">ONLY B</span>`
+            : '';
+      const nameClass = disabled ? 'tn-name tn-disabled' : 'tn-name';
+      const displayName = n.name || n.tag || '(unnamed)';
+      const hasChangedProps = n.changed_props && Object.keys(n.changed_props).length > 0;
+
+      return `<div class="tree-node tn-${n.status}"
+          data-orig-idx="${n._origIdx}"
+          data-path="${escAttr(n.path)}"
+          onclick="onNodeClick(${n._origIdx})"
+          title="${escAttr(n.path)}"
+          style="padding-left:${indent}px">
+        <span class="tn-icon">${icon}</span>
+        <div class="tn-body">
+          <div class="${nameClass}">
+            <span class="tn-tag">${n.tag}</span>
+            ${escHtml(displayName)}
+            ${statusBadge}
+            ${hasChangedProps ? `<span style="font-size:9px;color:var(--warning);margin-left:4px">(${Object.keys(n.changed_props).length}  prop)</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  renderSide(left,  'treeLeft',  'left');
+  renderSide(right, 'treeRight', 'right');
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s) { return String(s||'').replace(/"/g,'&quot;'); }
+
+// ── Node click → show props diff ──────────────────────────────────────────────
+function onNodeClick(origIdx) {
+  if (!cmpData) return;
+  const nodeL = cmpData.left[origIdx];
+  const nodeR = cmpData.right[origIdx];
+  if (!nodeL) return;
+
+  // Highlight focused node
+  document.querySelectorAll('.tree-node.tn-focused').forEach(el => el.classList.remove('tn-focused'));
+  document.querySelectorAll(`[data-orig-idx="${origIdx}"]`).forEach(el => el.classList.add('tn-focused'));
+
+  const changedProps = nodeL.changed_props || nodeR?.changed_props || {};
+  const allProps = new Set([...Object.keys(nodeL.props||{}), ...Object.keys(nodeR?.props||{})]);
+
+  if (nodeL.status === 'same' && allProps.size === 0) {
+    document.getElementById('propsPanel').classList.remove('show');
+    return;
+  }
+
+  document.getElementById('propsPanelTitle').textContent = nodeL.name || nodeL.tag || '(unnamed)';
+
+  const rows = [...allProps].sort().map(key => {
+    const va = (nodeL.props||{})[key] ?? '';
+    const vb = (nodeR?.props||{})[key] ?? '';
+    const changed = key in changedProps;
+    return `<tr class="${changed?'changed-row':''}">
+      <td class="prop-key">${escHtml(key)}</td>
+      <td class="prop-val-left">${escHtml(va) || '<span style="color:var(--muted);font-size:9px">(brak)</span>'}</td>
+      <td class="prop-val-right">${escHtml(vb) || '<span style="color:var(--muted);font-size:9px">(brak)</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('propsBody').innerHTML = rows || '<tr><td colspan="3" style="color:var(--muted);font-family:Space Mono,monospace;font-size:10px;padding:10px">No properties</td></tr>';
+  document.getElementById('propsPanel').classList.add('show');
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+function setFilter(mode) {
+  filterMode = mode;
+  document.getElementById('filterAll').className = 'filter-btn'+(mode==='all'?' active-all':'');
+  document.getElementById('filterDiff').className = 'filter-btn'+(mode==='diff'?' active':'');
+  if (cmpData) renderTrees();
+}
+
+// ── Diff navigation ───────────────────────────────────────────────────────────
+function navDiff(dir) {
+  if (!diffIndices.length) return;
+  currentDiffIdx = (currentDiffIdx + dir + diffIndices.length) % diffIndices.length;
+  const origIdx = diffIndices[currentDiffIdx];
+  document.getElementById('navPos').textContent = `${currentDiffIdx+1} / ${diffIndices.length}`;
+
+  // Scroll both panes to the node
+  scrollToNode(origIdx, 'treeLeft', 'paneLeft');
+  scrollToNode(origIdx, 'treeRight', 'paneRight');
+  onNodeClick(origIdx);
+}
+
+function scrollToNode(origIdx, treeId, paneId) {
+  const node = document.querySelector(`#${treeId} [data-orig-idx="${origIdx}"]`);
+  const pane = document.getElementById(paneId);
+  if (node && pane) {
+    // Account for sticky header (approx 36px)
+    const nodeTop = node.offsetTop;
+    pane.scrollTop = nodeTop - 60;
+  }
+}
+
+// ── Synchronized scrolling ────────────────────────────────────────────────────
+function setupScrollSync() {
+  const pL = document.getElementById('paneLeft');
+  const pR = document.getElementById('paneRight');
+
+  pL.addEventListener('scroll', () => {
+    if (!syncScroll || isScrolling) return;
+    isScrolling = true;
+    pR.scrollTop = pL.scrollTop;
+    requestAnimationFrame(() => { isScrolling = false; });
+  });
+  pR.addEventListener('scroll', () => {
+    if (!syncScroll || isScrolling) return;
+    isScrolling = true;
+    pL.scrollTop = pR.scrollTop;
+    requestAnimationFrame(() => { isScrolling = false; });
+  });
+}
+
+function toggleSyncScroll() {
+  syncScroll = !syncScroll;
+  const btn = document.getElementById('syncScrollBtn');
+  document.getElementById('syncLabel').textContent = syncScroll ? '🔗 Sync' : '🔓 Free';
+  btn.className = 'filter-btn'+(syncScroll?' active-all':'');
+  btn.textContent = syncScroll ? '🔗 Synchronized' : '🔓 Independent';
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (!cmpData) return;
+  if (e.key === 'ArrowRight' || e.key === 'n') navDiff(1);
+  if (e.key === 'ArrowLeft'  || e.key === 'p') navDiff(-1);
+});
+</script>
+</body>
+</html>
